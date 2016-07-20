@@ -1,0 +1,56 @@
+# Serial Correlation & Random Slope Model
+lmeTable = function(fromLme) {
+  thetable = summary(fromLme)$tTable
+  toRep = dim(thetable)[2]-1
+  if(length(fromLme$modelStruct$reStruct)==1) {
+    newnames = c(rownames(thetable), c('$\\sigma$', '$\\tau$'))
+    thetable = rbind(thetable, 
+                     c(as.numeric(VarCorr(fromLme)[1,2]), rep(NA, toRep)),
+                     c(fromLme$sigma, rep(NA, toRep)) 
+    )
+  } else {
+    newnames = c(rownames(thetable), c(names(fromLme$modelStruct$reStruct), '$\\tau$'))
+    thetable = rbind(thetable, 
+                     cbind(as.numeric(VarCorr(fromLme)[1,2]), c(NA, length(fromLme$modelStruct$reStruct), toRep)),
+                     c(fromLme$sigma, rep(NA, toRep)) )
+  }
+  rownames(thetable) = newnames
+  colnames(thetable)[colnames(thetable)=='Value'] = 'MLE'
+  
+  # if model is ar1
+  if('corStruct' %in% names(summary(fromLme$modelStruct))){
+     rangeNugget = c(summary(fromLme$modelStruct)$corStruct[[1]],summary(fromLme$modelStruct)$corStruct[[2]])
+     rangeNugget = exp(rangeNugget)
+     thetable = rbind(thetable, range=NA, sigmav = NA)
+     tauRow = grep("tau\\$$", rownames(thetable))
+     sigmaRow = grep("sigma\\$$", rownames(thetable))
+     thetable['range','MLE'] = rangeNugget[1]
+     tausq = rangeNugget[2] * thetable[tauRow, 'MLE']^2
+     thetable['sigmav','MLE'] = sqrt(thetable[tauRow, 'MLE']^2 - tausq)	
+     thetable[tauRow, 'MLE'] =  sqrt(tausq)
+     rownames(thetable) = gsub("sigmav", "$\\\\sigma_V$", rownames(thetable))
+     rownames(thetable)[sigmaRow] = '$\\sigma_U$'
+  }
+  thetable
+}
+
+load("C:/Users/Aaron-/Desktop/2016 Winter Courses/STA2201/Homework 2/Q3/CF.Rdata")
+library(nlme)
+#ageR <- NULL
+# for(i in unique(x$ID)){
+#   ageR = c(ageR, (subset(x, ID==i)$AGE/min(subset(x, ID==i)$AGE) - 1) )
+# }
+# x$ageR <- ageR
+# x$ageC <- x$AGE - 18
+################  Serial Correlation Model
+# exponential spatial correlation
+q3LmeExp <- lme(FEV1 ~ GENDER * F508 * AGE + PSEUDOA, random=~1|ID, data=x, correlation=corExp(form=~AGE|ID, nugget=T))
+# Gaussian/Normal spatial correlation
+#q3LmeGau <- lme(FEV1 ~ GENDER * F508 * AGE + PSEUDOA, random=~1|ID, data=x, correlation=corGaus(form=~AGE|ID, nugget=T))
+
+plot(Variogram(q3LmeExp, form = ~AGE | ID, data = x), ylim=range(0,1), main="Variogram with Gaussian spatial correlation")
+plot(Variogram(q3LmeGau, form = ~AGE | ID, data = x), ylim=range(0,1), main="Variogram with exponential spatial correlation")
+summary(q3LmeExp)$tTable
+
+################  Random Slope Model
+q3LmeRan <- lme(FEV1 ~ GENDER * F508 * AGE + PSEUDOA, random=~1 + AGE|ID, data=x)
